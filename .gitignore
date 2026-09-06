@@ -1,0 +1,7 @@
+# STM32CubeIDE / Eclipse workspace state
+.metadata/
+.settings/
+
+# Build output
+Debug/
+Release/
