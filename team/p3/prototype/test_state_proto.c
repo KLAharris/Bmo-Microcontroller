@@ -50,7 +50,17 @@ int main(void)
     assert(proto_state_get() == STATE_IDLE);
     printf("[PASS] Unsupported event ignored\n");
 
-    printf("\nAll 8 tests passed!\n");
+    
+    // Test 9: IDLE -> SLEEP -> IDLE
+    proto_state_handle_event(EVENT_SLEEP_REQUEST);
+    assert(proto_state_get() == STATE_SLEEP);
+    printf("[PASS] IDLE -> SLEEP\n");
+
+    proto_state_handle_event(EVENT_WAKE);
+    assert(proto_state_get() == STATE_IDLE);
+    printf("[PASS] SLEEP -> IDLE\n");
+
+    printf("\nAll 9 tests passed!\n");
 
     return 0;
 }

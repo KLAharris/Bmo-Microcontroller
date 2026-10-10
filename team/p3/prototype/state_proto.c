@@ -27,12 +27,16 @@ void proto_state_handle_event(BMO_Event event)
             }
             break;
 
+        
         case STATE_IDLE:
             if (event == EVENT_MENU_REQUEST) {
                 current_state = STATE_MENU;
             }
             else if (event == EVENT_SHAKE) {
                 current_state = STATE_REACTING;
+            }
+            else if (event == EVENT_SLEEP_REQUEST) {
+                current_state = STATE_SLEEP;
             }
             break;
 

@@ -13,6 +13,7 @@ typedef enum {
 // Mock Events
 typedef enum {
     EVENT_WAKE,
+    EVENT_SLEEP_REQUEST,
     EVENT_MENU_REQUEST,
     EVENT_SELECT,
     EVENT_BACK,
