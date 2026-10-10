@@ -1,0 +1,17 @@
+# Build output (CubeIDE)
+Debug/
+Release/
+
+# Tool output (recreated by the tools)
+tools/test_faces/out/
+tools/test_faces/test_faces
+tools/figma_faces/check/
+tools/desktop/bmo_face_desktop
+font_preview.png
+shot.bmp
+__pycache__/
+*.pyc
+
+# macOS / archives
+.DS_Store
+*.zip
