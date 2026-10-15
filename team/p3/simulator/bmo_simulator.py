@@ -42,6 +42,13 @@ dll.simulator_get_direction_count.restype = ctypes.c_uint32
 dll.simulator_get_selected_game.argtypes = []
 dll.simulator_get_selected_game.restype = ctypes.c_int
 
+# Game Lifecycle Manager functions
+dll.simulator_is_game_running.argtypes = []
+dll.simulator_is_game_running.restype = ctypes.c_int
+
+dll.simulator_get_active_game.argtypes = []
+dll.simulator_get_active_game.restype = ctypes.c_int
+
 # Values from bmo_state.h
 STATES = ["SLEEP", "IDLE", "REACTING", "MENU", "APP"]
 
@@ -80,11 +87,34 @@ def get_time_ms():
     return int(elapsed * 1000) & 0xFFFFFFFF
 
 
+def get_selected_game():
+    game_index = dll.simulator_get_selected_game()
+
+    if 0 <= game_index < len(GAMES):
+        return game_index
+
+    return 0
+
+
+def get_game_status():
+    running = bool(dll.simulator_is_game_running())
+
+    if running:
+        game_index = dll.simulator_get_active_game()
+
+        if 0 <= game_index < len(GAMES):
+            return True, GAMES[game_index]
+
+        return True, "UNKNOWN"
+
+    return False, "NONE"
+
+
 # Synchronize the initial state timer
 dll.simulator_tick(get_time_ms())
 
 root = tk.Tk()
-root.title("BMO Simulator - P2 + P3 + Game Menu")
+root.title("BMO Simulator - P2 + P3 + Game Lifecycle")
 root.configure(bg="#202830")
 
 # Simulated LCD screen
@@ -99,7 +129,29 @@ state_label = tk.Label(
     bg="#202830",
     fg="white",
 )
-state_label.pack(pady=8)
+state_label.pack(pady=(8, 4))
+
+# Game Lifecycle status panel
+lifecycle_frame = tk.Frame(root, bg="#202830")
+lifecycle_frame.pack(pady=(0, 10))
+
+game_running_label = tk.Label(
+    lifecycle_frame,
+    text="Game Running: NO",
+    font=("Arial", 12, "bold"),
+    bg="#202830",
+    fg="#ffb86c",
+)
+game_running_label.pack(pady=2)
+
+active_game_label = tk.Label(
+    lifecycle_frame,
+    text="Active Game: NONE",
+    font=("Arial", 12),
+    bg="#202830",
+    fg="white",
+)
+active_game_label.pack(pady=2)
 
 # Game selection panel
 game_frame = tk.Frame(root, bg="#202830")
@@ -151,33 +203,26 @@ button_frame = tk.Frame(root, bg="#202830")
 button_frame.pack(pady=10)
 
 
-def get_selected_game():
-    game_index = dll.simulator_get_selected_game()
-
-    if 0 <= game_index < len(GAMES):
-        return game_index
-
-    return 0
-
-
 def send_event(name):
     # Update timers before processing the event
     dll.simulator_tick(get_time_ms())
 
     previous_state = dll.simulator_get_state()
     selected_game = GAMES[get_selected_game()]
+    was_running, previous_game = get_game_status()
 
     # Send event to the real C State Machine
     dll.simulator_send_event(EVENTS[name])
 
     state = dll.simulator_get_state()
+    is_running, active_game = get_game_status()
 
     print(
         f"Event: {name} -> "
         f"State: {STATES[state]}"
     )
 
-    # Report the selected game when entering APP from MENU
+    # Verify game start when entering APP from MENU
     if (
         name == "Select"
         and previous_state == STATES.index("MENU")
@@ -185,8 +230,32 @@ def send_event(name):
     ):
         print(
             f"Selected Game: {selected_game} -> "
-            "Entered APP (game not connected yet)"
+            f"Game Running: {'YES' if is_running else 'NO'} -> "
+            f"Active Game: {active_game}"
         )
+
+        if is_running and active_game == selected_game:
+            print(
+                "Game Lifecycle: START CONFIRMED "
+                "(game implementation not connected yet)"
+            )
+        else:
+            print("Game Lifecycle: START CHECK FAILED")
+
+    # Verify game stop when leaving APP
+    if (
+        previous_state == STATES.index("APP")
+        and state != STATES.index("APP")
+    ):
+        print(
+            f"Previous Game: {previous_game} -> "
+            f"Game Running: {'YES' if is_running else 'NO'}"
+        )
+
+        if was_running and not is_running:
+            print("Game Lifecycle: STOP CONFIRMED")
+        else:
+            print("Game Lifecycle: STOP CHECK FAILED")
 
 
 for i, name in enumerate(
@@ -319,7 +388,7 @@ def update_game_menu(state):
     if state == STATES.index("MENU"):
         if not game_frame.winfo_manager():
             game_frame.pack(
-                after=state_label,
+                after=lifecycle_frame,
                 pady=(0, 10),
             )
 
@@ -344,6 +413,19 @@ def update_game_menu(state):
             game_frame.pack_forget()
 
 
+def update_game_lifecycle():
+    is_running, active_game = get_game_status()
+
+    game_running_label.config(
+        text=f"Game Running: {'YES' if is_running else 'NO'}",
+        fg="#38d995" if is_running else "#ffb86c",
+    )
+
+    active_game_label.config(
+        text=f"Active Game: {active_game}"
+    )
+
+
 def update_screen():
     # Get real elapsed time
     now_ms = get_time_ms()
@@ -357,6 +439,9 @@ def update_screen():
     state_label.config(
         text=f"Current State: {STATES[state]}"
     )
+
+    # Update Game Lifecycle status
+    update_game_lifecycle()
 
     # Update selected game display
     update_game_menu(state)

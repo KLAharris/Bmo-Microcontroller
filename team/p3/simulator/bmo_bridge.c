@@ -6,6 +6,7 @@
 #include "bmo_face.h"
 #include "fake_lcd.h"
 #include "lcd_test.h"
+#include "bmo_game.h"
 
 /* Store the last direction received by the active game */
 static int last_game_direction = -1;
@@ -112,4 +113,16 @@ void simulator_tick(uint32_t now_ms)
 const uint16_t *simulator_get_screen(void)
 {
     return lcd_screen;
+}
+
+/* Check whether the Game Manager is running */
+int simulator_is_game_running(void)
+{
+    return (int)bmo_game_is_running();
+}
+
+/* Read the active game from the Game Manager */
+int simulator_get_active_game(void)
+{
+    return (int)bmo_game_get_active();
 }
