@@ -19,6 +19,21 @@
 typedef void (*bmo_game_start_callback_t)(void);
 typedef void (*bmo_game_stop_callback_t)(void);
 typedef void (*bmo_game_update_callback_t)(uint32_t now_ms);
+/* Callback for directional input from D-Pad */
+typedef void (*bmo_game_direction_callback_t)(
+    bmo_input_direction_t direction
+);
+
+/* Register directional input handler for a game */
+void bmo_game_register_direction(
+    bmo_game_t game,
+    bmo_game_direction_callback_t callback
+);
+
+/* Forward D-Pad input to the currently running game */
+void bmo_game_handle_direction(
+    bmo_input_direction_t direction
+);
 
 /* Initialize game manager */
 void bmo_game_init(void);

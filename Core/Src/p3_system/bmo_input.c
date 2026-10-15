@@ -1,6 +1,7 @@
 
 #include "bmo_input.h"
 #include "bmo_state.h"
+#include "bmo_game.h"
 
 /* Callback for the active game */
 static bmo_input_direction_callback_t direction_callback = 0;
@@ -31,7 +32,7 @@ void bmo_input_handle_direction(
 )
 {
     /* Reject invalid directions */
-    if (direction > BMO_INPUT_RIGHT)
+    if ((uint32_t)direction > (uint32_t)BMO_INPUT_RIGHT)
     {
         return;
     }
@@ -62,6 +63,9 @@ void bmo_input_handle_direction(
     }
 
     /* APP: forward direction to the active game */
+    bmo_game_handle_direction(direction);
+
+    /* Preserve the existing simulator callback */
     if (direction_callback != 0)
     {
         direction_callback(direction);

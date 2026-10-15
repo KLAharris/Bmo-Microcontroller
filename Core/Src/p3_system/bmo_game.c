@@ -18,6 +18,9 @@ static bmo_game_callbacks_t game_callbacks[BMO_GAME_COUNT];
 /* Current game status */
 static bmo_game_t active_game = BMO_GAME_SNAKE;
 static uint8_t game_running = 0U;
+/* Direction callbacks for Snake and Simon */
+static bmo_game_direction_callback_t
+    game_direction_callbacks[BMO_GAME_COUNT];
 
 /* Initialize the Game Lifecycle Manager */
 void bmo_game_init(void)
@@ -29,6 +32,7 @@ void bmo_game_init(void)
         game_callbacks[i].start = 0;
         game_callbacks[i].stop = 0;
         game_callbacks[i].update = 0;
+        game_direction_callbacks[i] = 0;
     }
 
     active_game = BMO_GAME_SNAKE;
@@ -119,4 +123,42 @@ uint8_t bmo_game_is_running(void)
 bmo_game_t bmo_game_get_active(void)
 {
     return active_game;
+}
+
+/* Register directional input for Snake or Simon */
+void bmo_game_register_direction(
+    bmo_game_t game,
+    bmo_game_direction_callback_t callback
+)
+{
+    if ((uint32_t)game >= BMO_GAME_COUNT)
+    {
+        return;
+    }
+
+    game_direction_callbacks[game] = callback;
+}
+
+/* Forward D-Pad input to the currently running game */
+void bmo_game_handle_direction(
+    bmo_input_direction_t direction
+)
+{
+    /* Ignore input when no game is running */
+    if (!game_running)
+    {
+        return;
+    }
+
+    /* Reject invalid directions */
+    if ((uint32_t)direction > (uint32_t)BMO_INPUT_RIGHT)
+    {
+        return;
+    }
+
+    /* Forward input only to the active game's callback */
+    if (game_direction_callbacks[active_game] != 0)
+    {
+        game_direction_callbacks[active_game](direction);
+    }
 }
