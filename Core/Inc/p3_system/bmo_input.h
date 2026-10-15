@@ -13,7 +13,14 @@ typedef enum
     BMO_INPUT_RIGHT
 } bmo_input_direction_t;
 
-/* Callback for receiving directional input */
+/* Available games */
+typedef enum
+{
+    BMO_GAME_SNAKE = 0,
+    BMO_GAME_SIMON
+} bmo_game_t;
+
+/* Callback for directional input in APP state */
 typedef void (*bmo_input_direction_callback_t)(
     bmo_input_direction_t direction
 );
@@ -21,14 +28,17 @@ typedef void (*bmo_input_direction_callback_t)(
 /* Initialize the input handler */
 void bmo_input_init(void);
 
-/* Register a callback for directional input */
+/* Register a callback for the active game */
 void bmo_input_set_direction_callback(
     bmo_input_direction_callback_t callback
 );
 
-/* Dispatch a directional input */
+/* Handle D-Pad input according to the current state */
 void bmo_input_handle_direction(
     bmo_input_direction_t direction
 );
+
+/* Get the currently selected game */
+bmo_game_t bmo_input_get_selected_game(void);
 
 #endif /* BMO_INPUT_H */

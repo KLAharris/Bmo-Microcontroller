@@ -86,6 +86,12 @@ int simulator_get_state(void)
     return (int)bmo_state_get();
 }
 
+/* Read the currently selected game in MENU */
+int simulator_get_selected_game(void)
+{
+    return (int)bmo_input_get_selected_game();
+}
+
 /* Read the current P2 face */
 int simulator_get_face(void)
 {
