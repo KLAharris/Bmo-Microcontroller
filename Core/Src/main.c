@@ -82,7 +82,7 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  /* Reset of all peripherals, Initializes the Flash interface and the SysTick. */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
@@ -114,6 +114,9 @@ int main(void)
   /* Initialize P3 State Machine */
   bmo_state_init();
 
+  /* Synchronize state timer with system time */
+  bmo_state_tick(HAL_GetTick());
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -124,8 +127,14 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-    /* Update face animation */
-    face_tick(HAL_GetTick());
+    /* Get current system time */
+    uint32_t now_ms = HAL_GetTick();
+
+    /* Update P3 State Machine timers */
+    bmo_state_tick(now_ms);
+
+    /* Update P2 face animation */
+    face_tick(now_ms);
 
   }
   /* USER CODE END 3 */
@@ -202,7 +211,7 @@ static void MPU_Config(void)
   /* Disables the MPU */
   HAL_MPU_Disable();
 
-  /** Initializes and configures the Region and the memory to be protected
+  /** Initializes and configures the Region 0
   */
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
@@ -242,10 +251,10 @@ void Error_Handler(void)
 
 #ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
+  * @brief  Reports the name of the source file and the line number
   *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert param error line source number
+  * @param  file: pointer to the file name
+  * @param  line: assert_param error line source number
   * @retval None
   */
 void assert_failed(uint8_t *file, uint32_t line)

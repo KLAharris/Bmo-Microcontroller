@@ -2,6 +2,8 @@
 #ifndef BMO_STATE_H
 #define BMO_STATE_H
 
+#include <stdint.h>
+
 // Main states of BMO
 typedef enum {
     BMO_STATE_SLEEP,
@@ -30,5 +32,8 @@ void bmo_state_handle_event(bmo_event_t event);
 
 // Get current state
 bmo_state_t bmo_state_get(void);
+
+// Update state timers (milliseconds)
+void bmo_state_tick(uint32_t now_ms);
 
 #endif
