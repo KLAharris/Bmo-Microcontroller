@@ -4,8 +4,9 @@
 
 #include <stdint.h>
 
-// Main states of BMO
-typedef enum {
+/* Main states of BMO */
+typedef enum
+{
     BMO_STATE_SLEEP,
     BMO_STATE_IDLE,
     BMO_STATE_REACTING,
@@ -13,8 +14,9 @@ typedef enum {
     BMO_STATE_APP
 } bmo_state_t;
 
-// Prototype events (subject to team API agreement)
-typedef enum {
+/* Events handled by the state machine */
+typedef enum
+{
     BMO_EVENT_WAKE,
     BMO_EVENT_SLEEP_REQUEST,
     BMO_EVENT_MENU_REQUEST,
@@ -24,16 +26,16 @@ typedef enum {
     BMO_EVENT_TIMEOUT
 } bmo_event_t;
 
-// Initialize state machine
+/* Initialize the state machine */
 void bmo_state_init(void);
 
-// Process an incoming event from the main loop
+/* Process an incoming event */
 void bmo_state_handle_event(bmo_event_t event);
 
-// Get current state
+/* Get the current state */
 bmo_state_t bmo_state_get(void);
 
-// Update state timers (milliseconds)
+/* Update state timers using milliseconds */
 void bmo_state_tick(uint32_t now_ms);
 
-#endif
+#endif /* BMO_STATE_H */

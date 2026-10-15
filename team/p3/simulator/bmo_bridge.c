@@ -2,9 +2,23 @@
 #include <stdint.h>
 
 #include "bmo_state.h"
+#include "bmo_input.h"
 #include "bmo_face.h"
 #include "fake_lcd.h"
 #include "lcd_test.h"
+
+/* Store the last direction received by the active game */
+static int last_game_direction = -1;
+static uint32_t game_direction_count = 0;
+
+/* Temporary game callback for testing D-Pad */
+static void simulator_game_direction_callback(
+    bmo_input_direction_t direction
+)
+{
+    last_game_direction = (int)direction;
+    game_direction_count++;
+}
 
 /* Initialize P2 Face Renderer and P3 State Machine */
 void simulator_init(void)
@@ -20,12 +34,50 @@ void simulator_init(void)
 
     /* Initialize P3 State Machine */
     bmo_state_init();
+
+    /* Initialize P3 Input Handler */
+    bmo_input_init();
+
+    /* Register temporary game callback */
+    bmo_input_set_direction_callback(
+        simulator_game_direction_callback
+    );
+
+    /* Reset D-Pad test results */
+    last_game_direction = -1;
+    game_direction_count = 0;
 }
 
 /* Send an event to the real P3 State Machine */
 void simulator_send_event(int event)
 {
     bmo_state_handle_event((bmo_event_t)event);
+}
+
+/* Send a D-Pad direction to the real P3 Input Handler */
+void simulator_send_direction(int direction)
+{
+    if (direction < BMO_INPUT_UP ||
+        direction > BMO_INPUT_RIGHT)
+    {
+        return;
+    }
+
+    bmo_input_handle_direction(
+        (bmo_input_direction_t)direction
+    );
+}
+
+/* Read the last direction received by the game callback */
+int simulator_get_last_direction(void)
+{
+    return last_game_direction;
+}
+
+/* Count directions actually forwarded to the game */
+uint32_t simulator_get_direction_count(void)
+{
+    return game_direction_count;
 }
 
 /* Read the current P3 state */
