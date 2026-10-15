@@ -29,6 +29,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "bmo_state.h"
+#include "bmo_input.h"
 #include "face_gfx.h"
 #include "bmo_face.h"
 /* USER CODE END Includes */
@@ -111,6 +112,9 @@ int main(void)
   /* Initialize P2 Face Renderer */
   face_init(HAL_GetTick());
 
+  /* Initialize P3 Input Handler */
+  bmo_input_init();
+
   /* Initialize P3 State Machine */
   bmo_state_init();
 
@@ -141,7 +145,7 @@ int main(void)
 }
 
 /**
-  * @brief  System Clock Configuration
+  * @brief System Clock Configuration
   * @retval None
   */
 void SystemClock_Config(void)
@@ -149,12 +153,12 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Configure the main internal regulator output voltage
+  /** Initializes the CPU, AHB and APB buses clocks
   */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-  /** Initializes the RCC Oscillators according to the specified parameters
+  /** Initializes the RCC Oscillators
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
@@ -254,15 +258,14 @@ void Error_Handler(void)
   * @brief  Reports the name of the source file and the line number
   *         where the assert_param error has occurred.
   * @param  file: pointer to the file name
-  * @param  line: assert_param error line source number
+  * @param  line: line number
   * @retval None
   */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
 
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* User can add his own implementation to report the HAL error return state */
 
   /* USER CODE END 6 */
 }
