@@ -7,6 +7,7 @@
 #include "fake_lcd.h"
 #include "lcd_test.h"
 #include "bmo_game.h"
+#include "bmo_menu.h"
 
 /* Store the last direction received by the simulator callback */
 static int last_game_direction = -1;
@@ -60,6 +61,9 @@ void simulator_init(void)
 
     /* Initialize P3 Input Handler */
     bmo_input_init();
+
+    /* Initialize Main Menu data */
+    bmo_menu_init();
 
     /* Register mock game-specific callbacks */
     bmo_game_register_direction(
@@ -174,4 +178,78 @@ int simulator_is_game_running(void)
 int simulator_get_active_game(void)
 {
     return (int)bmo_game_get_active();
+}
+
+/* ===== Main Menu Simulator Interface ===== */
+
+/* Read current menu screen */
+int simulator_menu_get_screen(void)
+{
+    return (int)bmo_menu_get_screen();
+}
+
+/* Read selected main menu category */
+int simulator_menu_get_category(void)
+{
+    return (int)bmo_menu_get_category();
+}
+
+/* Read selected game in new menu module */
+int simulator_menu_get_game(void)
+{
+    return (int)bmo_menu_get_game();
+}
+
+/* Read selected timer mode */
+int simulator_menu_get_timer(void)
+{
+    return (int)bmo_menu_get_timer();
+}
+
+/* Set selected main menu category */
+void simulator_menu_set_category(int category)
+{
+    if (category >= BMO_MENU_GAMES &&
+        category < BMO_MENU_COUNT)
+    {
+        bmo_menu_set_category(
+            (bmo_menu_category_t)category
+        );
+    }
+}
+
+/* Set selected game */
+void simulator_menu_set_game(int game)
+{
+    if (game >= BMO_MENU_GAME_SNAKE &&
+        game < BMO_MENU_GAME_COUNT)
+    {
+        bmo_menu_set_game(
+            (bmo_menu_game_t)game
+        );
+    }
+}
+
+/* Set selected timer mode */
+void simulator_menu_set_timer(int timer)
+{
+    if (timer >= BMO_MENU_TIMER_STOPWATCH &&
+        timer < BMO_MENU_TIMER_COUNT)
+    {
+        bmo_menu_set_timer(
+            (bmo_menu_timer_t)timer
+        );
+    }
+}
+
+/* Open selected main menu category */
+void simulator_menu_open_category(void)
+{
+    bmo_menu_open_selected_category();
+}
+
+/* Return menu data to main screen */
+void simulator_menu_show_main(void)
+{
+    bmo_menu_show_main();
 }

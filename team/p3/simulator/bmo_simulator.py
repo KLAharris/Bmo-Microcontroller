@@ -49,6 +49,32 @@ dll.simulator_is_game_running.restype = ctypes.c_int
 dll.simulator_get_active_game.argtypes = []
 dll.simulator_get_active_game.restype = ctypes.c_int
 
+# Main Menu functions from the real P3 C module
+for _name in (
+    "simulator_menu_get_screen",
+    "simulator_menu_get_category",
+    "simulator_menu_get_game",
+    "simulator_menu_get_timer",
+):
+    _func = getattr(dll, _name)
+    _func.argtypes = []
+    _func.restype = ctypes.c_int
+
+for _name in ("simulator_menu_set_category", "simulator_menu_set_game", "simulator_menu_set_timer"):
+    _func = getattr(dll, _name)
+    _func.argtypes = [ctypes.c_int]
+    _func.restype = None
+
+for _name in ("simulator_menu_open_category", "simulator_menu_show_main"):
+    _func = getattr(dll, _name)
+    _func.argtypes = []
+    _func.restype = None
+
+MENU_CATEGORIES = ("Games", "Timer", "Music")
+MENU_SCREENS = ("Main Menu", "Games", "Timer", "Music")
+MENU_GAMES = ("Snake", "Simon")
+MENU_TIMERS = ("Stopwatch", "Countdown")
+
 # Values from bmo_state.h
 STATES = ["SLEEP", "IDLE", "REACTING", "MENU", "APP"]
 
@@ -108,8 +134,6 @@ def get_game_status():
         return True, "UNKNOWN"
 
     return False, "NONE"
-
-
 # Synchronize the initial state timer
 dll.simulator_tick(get_time_ms())
 
@@ -121,6 +145,89 @@ root.configure(bg="#202830")
 screen_label = tk.Label(root, bg="#202830")
 screen_label.pack(padx=20, pady=(20, 10))
 
+# Main Menu Preview: separate from the actual fake LCD framebuffer.
+# Buttons below are test controls, NOT physical BMO button assignments.
+menu_preview = tk.Frame(root, bg="#24333b", padx=12, pady=10)
+menu_preview.pack(fill="x", padx=20, pady=(0, 8))
+
+tk.Label(
+    menu_preview,
+    text="MAIN MENU PREVIEW (P3 C data / test controls only)",
+    bg="#24333b", fg="#bdebdc", font=("Arial", 11, "bold"),
+).pack(pady=(0, 6))
+
+menu_status = tk.Label(
+    menu_preview, text="", bg="#24333b", fg="white",
+    font=("Arial", 12), justify="center",
+)
+menu_status.pack(pady=4)
+
+menu_controls = tk.Frame(menu_preview, bg="#24333b")
+menu_controls.pack(pady=4)
+
+
+def menu_select_category(index):
+    dll.simulator_menu_show_main()
+    dll.simulator_menu_set_category(index)
+    dll.simulator_menu_open_category()
+    refresh_menu_preview()
+def menu_select_game(index):
+    dll.simulator_menu_set_game(index)
+    refresh_menu_preview()
+
+
+def menu_select_timer(index):
+    dll.simulator_menu_set_timer(index)
+    refresh_menu_preview()
+
+
+def refresh_menu_preview():
+    screen = dll.simulator_menu_get_screen()
+    category = dll.simulator_menu_get_category()
+    game = dll.simulator_menu_get_game()
+    timer = dll.simulator_menu_get_timer()
+
+    if not (0 <= screen < len(MENU_SCREENS)):
+        menu_status.config(text="Invalid menu screen")
+        return
+
+    if screen == 0:
+        detail = "Choose a category below"
+    elif screen == 1:
+        detail = "Game selection: " + MENU_GAMES[game] if 0 <= game < len(MENU_GAMES) else "Invalid game"
+    elif screen == 2:
+        detail = "Timer mode: " + MENU_TIMERS[timer] if 0 <= timer < len(MENU_TIMERS) else "Invalid timer"
+    else:
+        detail = "Music: P4 app (not connected in preview)"
+
+    menu_status.config(text=f"{MENU_SCREENS[screen]}  |  {detail}")
+    
+
+for _i, _label in enumerate(MENU_CATEGORIES):
+    tk.Button(
+        menu_controls, text=_label, width=10,
+        command=lambda i=_i: menu_select_category(i),
+    ).grid(row=0, column=_i, padx=3, pady=3)
+
+for _i, _label in enumerate(MENU_GAMES):
+    tk.Button(
+        menu_controls, text=_label, width=10,
+        command=lambda i=_i: menu_select_game(i),
+    ).grid(row=1, column=_i, padx=3, pady=3)
+
+for _i, _label in enumerate(MENU_TIMERS):
+    tk.Button(
+        menu_controls, text=_label, width=10,
+        command=lambda i=_i: menu_select_timer(i),
+    ).grid(row=2, column=_i, padx=3, pady=3)
+
+tk.Button(
+    menu_controls, text="Main Menu", width=12,
+    command=lambda: (dll.simulator_menu_show_main(), refresh_menu_preview()),
+).grid(row=2, column=2, padx=3, pady=3)
+
+refresh_menu_preview()
+
 # Current state label
 state_label = tk.Label(
     root,
@@ -130,7 +237,6 @@ state_label = tk.Label(
     fg="white",
 )
 state_label.pack(pady=(8, 4))
-
 # Game Lifecycle status panel
 lifecycle_frame = tk.Frame(root, bg="#202830")
 lifecycle_frame.pack(pady=(0, 10))
@@ -188,7 +294,6 @@ for game_name in GAMES:
     )
     label.pack(side=tk.LEFT, padx=8)
     game_labels.append(label)
-
 game_hint = tk.Label(
     game_frame,
     text="LEFT / RIGHT: Choose Game    |    Select: Enter",
@@ -256,11 +361,7 @@ def send_event(name):
             print("Game Lifecycle: STOP CONFIRMED")
         else:
             print("Game Lifecycle: STOP CHECK FAILED")
-
-
-for i, name in enumerate(
-    ["Wake", "Sleep", "Shake", "Menu", "Select", "Back"]
-):
+for i, name in enumerate(["Wake", "Sleep", "Shake", "Menu", "Select", "Back"]):
     button = tk.Button(
         button_frame,
         text=name,
@@ -268,14 +369,7 @@ for i, name in enumerate(
         width=10,
         command=lambda n=name: send_event(n),
     )
-    button.grid(
-        row=i // 3,
-        column=i % 3,
-        padx=8,
-        pady=8,
-    )
-
-# D-Pad controls
+    button.grid(row=i // 3, column=i % 3)
 dpad_frame = tk.Frame(root, bg="#202830")
 dpad_frame.pack(pady=(5, 15))
 
@@ -348,13 +442,11 @@ def send_direction(name):
             f"State: {STATES[state]} -> "
             "IGNORED"
         )
-
-
 dpad_buttons = [
-    ("UP", 1, 1),
-    ("LEFT", 2, 0),
-    ("DOWN", 2, 1),
-    ("RIGHT", 2, 2),
+("UP", 1, 1),
+("LEFT", 2, 0),
+("DOWN", 2, 1),
+("RIGHT", 2, 2),
 ]
 
 for name, row, column in dpad_buttons:
@@ -439,8 +531,7 @@ def update_screen():
     state_label.config(
         text=f"Current State: {STATES[state]}"
     )
-
-    # Update Game Lifecycle status
+      # Update Game Lifecycle status
     update_game_lifecycle()
 
     # Update selected game display
@@ -462,10 +553,6 @@ def update_screen():
 
     screen_label.config(image=photo)
     screen_label.image = photo
-
-    # Schedule the next screen update
-    root.after(33, update_screen)
-
 
 update_screen()
 root.mainloop()
