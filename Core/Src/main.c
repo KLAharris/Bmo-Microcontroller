@@ -32,6 +32,7 @@
 #include "bmo_input.h"
 #include "face_gfx.h"
 #include "bmo_face.h"
+#include "bmo_p4_adapter.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -117,6 +118,9 @@ int main(void)
 
   /* Initialize P3 State Machine */
   bmo_state_init();
+
+  /* Register P4 Snake and Simon */
+  bmo_p4_adapter_register();
 
   /* Synchronize state timer with system time */
   bmo_state_tick(HAL_GetTick());
