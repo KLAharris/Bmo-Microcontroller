@@ -14,11 +14,12 @@
 void gfx_fill_rect(int x, int y, int w, int h, uint16_t color);
 
 /* Draw short text at (x, y) — status/score, not paragraphs. */
-void gfx_text(int x, int y, const char *str, uint16_t color);
+void bmo_p4_gfx_text(int x, int y, const char *str, uint16_t color);
+#define gfx_text bmo_p4_gfx_text
 
 /* Confirm these match the real panel. */
-#define GFX_WIDTH  800
-#define GFX_HEIGHT 480
+#define GFX_WIDTH  480
+#define GFX_HEIGHT 320
 
 #define RGB565(r, g, b) ((uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | (((b) & 0xF8) >> 3)))
 #define COLOR_BLACK  RGB565(0, 0, 0)
