@@ -9,8 +9,8 @@ install the **wake-word model**, and call audio from your code.
 | You are | Read |
 |---|---|
 | **P2** (owner of the shared `boum.ioc`) | 1, 2, 3, 4, 5 |
-| **P3 / P4** (menu, games) | 6, 7 |
-| **Anyone testing audio on their own Nucleo** | 1 → 8, in order |
+| **P3 / P4** (menu, games, music) | 6, 7 |
+| **Anyone testing audio on their own Nucleo** | 1 → 9, in order |
 
 ---
 
@@ -22,7 +22,8 @@ install the **wake-word model**, and call audio from your code.
 | "hey BMO" / "games" / "music" model (Edge Impulse) on the STM32 | ✅ working, about 86 ms per check |
 | Speaker (MAX98357A amp), SAI2 + DMA | ✅ working |
 | "bee-boop!" on "hey BMO", "bip" on games/music | ✅ working |
-| Voice lines and songs from the SD card (SPI3) | 🔧 in progress. The wiring is below; the code and CubeMX settings are coming. |
+| Voice lines and songs from the SD card (SPI3 + FatFs) | 🔧 code done and builds. On P5's bench the card isn't answering yet (`CMD0 -> FF`), which is being traced to wiring/power. |
+| BMO stops listening while it talks, keeps listening during songs ("hey BMO" stops a song) | ✅ in the code |
 
 **How the wake word behaves**
 
@@ -83,8 +84,16 @@ Connector names follow P1's pin map: **CN7 / CN8 / CN9 / CN10** are the Nucleo's
 | MOSI | PC12 | CN8-10 |
 | CS | PD2 | CN8-12 |
 
-- Keep the SD wires short, 15 cm or less.
-- SD card: **FAT32** (Mac Disk Utility → Erase → *MS-DOS (FAT)*, *Master Boot Record*), 32 GB or smaller.
+- **VCC must be 5V, not 3V3.** The module has its own 3.3 V regulator and level shifter; on
+  3.3 V the card gets too little voltage and answers only sometimes.
+- Keep the SD wires short (15 cm or less), and use **one female-to-female jumper per pin**
+  if you can. Male-to-female extension joins come loose easily.
+- The amp and the SD module share the 5V line. If the card fails right after a sound, try
+  with the amp's VIN unplugged to see whether the 5 V is dipping.
+- SD card: **FAT32** (Mac Disk Utility → Erase → *MS-DOS (FAT)*, *Master Boot Record*),
+  32 GB or smaller. Push it in until it clicks.
+- The RESET button does **not** reset the card. After a wiring change, **unplug the USB for
+  5 s** so the card powers off too.
 
 ---
 
@@ -144,10 +153,37 @@ When CubeMX asks *"run automatic clock issues solver?"*, click **No**. It change
 
 When it's right, the red dot on the Clock Configuration tab disappears.
 
-### 2e. SD card: SPI3
+### 2e. SD card: SPI3 (Connectivity → SPI3)
 
-The SPI3 settings will be added here with the SD code. The pins are already decided:
-**PC10 = SPI3_SCK, PC11 = SPI3_MISO, PC12 = SPI3_MOSI, PD2 = GPIO output `SD_CS` (start High).**
+| Setting | Value |
+|---|---|
+| Mode | **Full-Duplex Master** |
+| Hardware NSS Signal | **Disable** |
+| Pins | **PC10 = SPI3_SCK, PC11 = SPI3_MISO, PC12 = SPI3_MOSI**. CubeMX sometimes picks PB3/PB4/PB5 instead; those are SWO and the backlight, so click PC10/PC11/PC12 and choose the SPI3 functions. |
+| Frame Format | Motorola |
+| Data Size | **8 Bits** (the default is 4) |
+| First Bit | MSB First |
+| Prescaler (for Baud Rate) | **256** → about 210 KBits/s. The SD card needs a slow start; the code speeds it up afterwards. |
+| Clock Polarity (CPOL) | **Low** |
+| Clock Phase (CPHA) | **1 Edge** |
+| CRC Calculation | Disabled |
+| NSSP Mode | **Disabled** |
+| NSS Signal Type | Software |
+| DMA / NVIC | none needed |
+
+### 2f. SD chip select (PD2)
+
+- Click **PD2** → **GPIO_Output**. Right-click → **Enter User Label** → **`SD_CS`** (this exact name).
+- System Core → GPIO → PD2: output level **High**, Output Push Pull, no pull-up/down,
+  maximum output speed **High**.
+
+### 2g. FatFs (Middleware and Software Packs → FATFS)
+
+- Tick **☑ User-defined** (not "SD Card", which is the SDMMC version).
+- Set Defines: **USE_LFN = Disabled** (file names must be short, like `HI.WAV`),
+  **MAX_SS = 512**, **FS_EXFAT = Disabled**. Leave the rest as it is.
+- Check Clock Configuration afterwards: still no red dot, SYSCLK 216, I2S 128, SAI2 11.285714.
+  SPI3 runs from APB1 (54 MHz).
 
 ---
 
@@ -184,7 +220,7 @@ Components** choose the new version, and click **GENERATE CODE**.
 ### 5a. Refresh and convert to C++
 
 1. Click the project in Project Explorer and press **F5** (refresh). New folders appear:
-   `Middlewares` and `edgeimpulse`.
+   `Middlewares`, `edgeimpulse` and `FATFS`, plus `Core/Src/spi.c`.
 2. Right-click the project → **Convert to C++** → **Continue**. The Edge Impulse library is
    C++. `main.c` and your other `.c` files stay C, and that's fine.
 
@@ -220,15 +256,40 @@ Drag these into Project Explorer and choose **Copy files**:
 
 | From `team/p5/firmware/` | Into your project |
 |---|---|
-| `Core/Src/p5_audio/wakeword.cpp`, `audio_sfx.c` | `Core/Src/p5_audio/` (create the folder) |
-| `Core/Inc/p5_audio/wakeword.h`, `audio_sfx.h` | `Core/Inc/p5_audio/` |
+| `Core/Src/p5_audio/wakeword.cpp`, `audio_sfx.c`, `sd_spi.c` | `Core/Src/p5_audio/` (create the folder) |
+| `Core/Inc/p5_audio/wakeword.h`, `audio_sfx.h`, `sd_spi.h` | `Core/Inc/p5_audio/` |
 | `audio_test.c/.h` (optional, a plain 441 Hz tone) | same folders |
 
 - Do **not** add `mic_stream.c` to the robot project. It's only for recording training clips,
   and it defines the same mic interrupts as `wakeword.cpp`. If you do add it, right-click it →
   **Resource Configurations → Exclude from Build** → tick **Debug and Release**.
 
-### 5d. `main.c`
+- When you replace a file, delete the old copy from Downloads first. Otherwise the browser
+  saves the new one as `sd_spi (1).c` and you copy the old one in again. Check the version:
+  `wakeword.cpp` prints `(v5)` at start-up, and `sd_spi.c` prints `v3 driver`.
+
+### 5d. Connect FatFs to the SD driver (`FATFS/Target/user_diskio.c`)
+
+Add the include in the `USER CODE BEGIN DECL` block, after `#include "ff_gen_drv.h"`:
+
+```c
+#include "p5_audio/sd_spi.h"
+```
+
+Then, in each function, replace the code **between** its `USER CODE BEGIN` / `END` lines with one line.
+Leave the `#if _USE_WRITE` / `#if _USE_IOCTL` lines around them as they are.
+
+| Function | Block | The only line inside |
+|---|---|---|
+| `USER_initialize` | INIT | `return SD_disk_initialize(pdrv);` |
+| `USER_status` | STATUS | `return SD_disk_status(pdrv);` |
+| `USER_read` | READ | `return SD_disk_read(pdrv, buff, sector, count);` |
+| `USER_write` | WRITE | `return SD_disk_write(pdrv, buff, sector, count);` |
+| `USER_ioctl` | IOCTL | `return SD_disk_ioctl(pdrv, cmd, buff);` |
+
+These are inside USER CODE blocks, so CubeMX keeps them when you generate again.
+
+### 5e. `main.c`
 
 ```c
 /* USER CODE BEGIN Includes */
@@ -238,7 +299,8 @@ Drag these into Project Explorer and choose **Copy files**:
 /* USER CODE END Includes */
 ```
 
-`MX_I2S2_Init();` and `MX_SAI2_Init();` must be in the init list. CubeMX adds them.
+`MX_I2S2_Init();`, `MX_SAI2_Init();`, `MX_SPI3_Init();` and `MX_FATFS_Init();` must be in the
+init list. CubeMX adds them.
 
 ```c
   /* USER CODE BEGIN 2 */
@@ -253,35 +315,62 @@ Drag these into Project Explorer and choose **Copy files**:
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    static int song_on = 0;          /* 1 while a song is playing          */
+    static int next_track = 1;       /* "music" plays TRACK1, TRACK2, ...  */
+    const int num_tracks = 1;        /* how many TRACKn.WAV are on the card */
+
+    if (song_on && !audio_busy()) song_on = 0;          /* song ended by itself */
+
+    /* blue USER button on the Nucleo = stop (bench test only) */
+    if (HAL_GPIO_ReadPin(USER_Btn_GPIO_Port, USER_Btn_Pin) == GPIO_PIN_SET && audio_busy()) {
+        audio_stop();
+        song_on = 0;
+    }
+
+    /* don't listen during BMO's own short sounds, but keep listening during songs */
+    wakeword_set_paused(audio_busy() && !song_on);
     int ev = wakeword_poll();
-    if (ev == WW_HEY_BMO) audio_sfx_play(SFX_WAKE);
-    else if (ev == WW_GAMES || ev == WW_MUSIC) audio_sfx_play(SFX_OK);
+
+    if (ev == WW_HEY_BMO && song_on) {                  /* "hey BMO" during a song = stop */
+        audio_stop();
+        song_on = 0;
+        audio_sfx_play(SFX_OK);
+    }
+    else if (ev == WW_HEY_BMO) { audio_sfx_play(SFX_WAKE); audio_say("HI.WAV"); }
+    else if (ev == WW_GAMES)   { audio_sfx_play(SFX_OK);   audio_say("GAMES.WAV"); }
+    else if (ev == WW_MUSIC) {
+        char name[16];
+        snprintf(name, sizeof name, "TRACK%d.WAV", next_track);
+        audio_sfx_play(SFX_OK);
+        if (audio_say(name) == 0) song_on = 1;
+        next_track = next_track % num_tracks + 1;      /* next time: the next song */
+    }
     audio_sfx_poll();
   }
   /* USER CODE END 3 */
 }
 ```
 
+This is the **bench test** loop (no screen or buttons). In the team build, P3's state machine
+does the same thing: the voice events open menus, and P4's Music app picks the song (section 6).
+
 When you edit USER CODE 3, keep the `}` that closes `while (1)`. A missing brace gives
 *"expected declaration or statement at end of input"*.
 
-**Required:** add this `__io_putchar` in **USER CODE BEGIN 0**. It sends `printf` to `huart3`:
+For `printf` to show up in the serial terminal, the project needs the usual `__io_putchar`
+that sends to `huart3`. The P5 bench project has it in USER CODE 0:
 
 ```c
 int __io_putchar(int ch) { HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, HAL_MAX_DELAY); return ch; }
 ```
 
-The audio code calls `printf`. `syscalls.c` sends `printf` to `__io_putchar`, but only declares it
-(weak); CubeMX never writes one. Without this line the first `printf` jumps to address 0 and the
-board **crashes (HardFault)** right at start-up. `boum` doesn't have it yet.
-
-### 5e. Optional, recommended: optimisation
+### 5f. Optional, recommended: optimisation
 
 Right-click project → **Properties → C/C++ Build → Settings → Tool Settings** →
 **MCU GCC Compiler → Optimization** and **MCU G++ Compiler → Optimization** → **-O2**.
 The model then takes less CPU time, so the screen and games stay smoother.
 
-### 5f. Build
+### 5g. Build
 
 Click the 🔨 hammer. The first build takes **3–5 minutes**, because the AI library is big.
 The result should be **0 errors**. The warnings come from the library and are fine.
@@ -300,17 +389,35 @@ The result should be **0 errors**. The warnings come from the library and are fi
 | `audio_sfx_play(SFX_OK)` | short "bip" |
 | `audio_sfx_play(SFX_BEEP)` | plain beep |
 | `audio_sfx_poll()` | Call every loop: stops the sound when it ends |
+| `audio_say("HI.WAV")` | Play a WAV file from the SD card. If a sound effect is playing, the file plays straight after it. Returns 0 if OK. |
+| `audio_stop()` | Stop whatever is playing (sound effect or file) |
+| `audio_set_volume(0..100)` | Volume for WAV files (default 100). Use 0 for mute. |
 | `audio_busy()` | 1 while BMO is making a sound. **Ignore shake gestures while this is 1.** |
+| `wakeword_set_paused(1 / 0)` | Stop / restart listening. Pause it while BMO talks, and during games so they get the CPU. |
 
 - `audio_sfx_play()` returns at once. The DMA plays the sound in the background.
 - **Timing:** every 0.125 s, `wakeword_poll()` runs the model once, which takes about 86 ms at -O0.
-  The rest of the time it returns at once. If games feel laggy, turn on -O2 (5e).
-- **Coming soon:** a way to pause listening during games, so they run at full speed.
+  The rest of the time it returns at once. If games feel laggy, turn on -O2 (5f).
+- Call `wakeword_set_paused(1)` when a game starts and `wakeword_set_paused(0)` when it ends,
+  so games run at full speed.
+- A WAV file is read from the SD card in 0.2 s pieces while it plays. The main loop must not be
+  blocked for more than about 0.15 s, or the sound stutters.
 
 **Music (P4's interface).** `bmo_system_board.c` has placeholder `music_play(index)`,
-`music_stop()`, `sys_is_muted()` and `sys_set_muted()`. P5 will replace them with real playback
-of `TRACK1.WAV` … `TRACK6.WAV` from the SD card. The track names stay as they are (HAPPY DAY,
-LOFI CHILL, SLEEPY MOON, ADVENTURE, DANCE PARTY, RAINY MIND).
+`music_stop()`, `sys_is_muted()` and `sys_set_muted()`. The real versions are just:
+
+```c
+void music_play(int index) {
+    char name[16];
+    snprintf(name, sizeof name, "TRACK%d.WAV", index + 1);   /* menu item 0 -> TRACK1.WAV */
+    audio_say(name);
+}
+void music_stop(void)          { audio_stop(); }
+void sys_set_muted(int muted)  { s_muted = muted ? 1 : 0; audio_set_volume(muted ? 0 : 100); }
+```
+
+So **menu item 1 = `TRACK1.WAV`, item 2 = `TRACK2.WAV`**, and so on. P4 keeps the list of names
+on screen and changes them to match the songs on the card.
 
 **Push-to-talk.** The green TALK button is PE15 (`BTN_TALK` in P1's `input.c`). Pressing it
 will make BMO listen without "hey BMO". Coming with the next update.
@@ -330,21 +437,62 @@ will make BMO listen without "hey BMO". Coming with the next update.
 
 | Resource | Used by audio |
 |---|---|
-| One DMA1 stream | SPI2_RX (mic). Any stream CubeMX picks is fine: Stream 1 on the P5 bench, Stream 3 in `boum.ioc`. |
-| One DMA2 stream | SAI2_A (amp). Any stream CubeMX picks is fine: Stream 2 on the P5 bench, Stream 4 in `boum.ioc`. |
+| A DMA1 stream for SPI2_RX (mic) | any free one: the bench uses Stream 1, `boum.ioc` uses Stream 3. The code doesn't care which. |
+| A DMA2 stream for SAI2_A (amp) | any free one: the bench uses Stream 2, `boum.ioc` uses Stream 4. |
 | PLLI2S, PLLSAI | mic and amp clocks (2d) |
+| SPI3 + FatFs (User-defined, drive `USERPath` = `"0:/"`) | SD card |
 | USART3 (PD8/PD9) | `printf` for testing only. Set `WW_DEBUG 0` at the top of `wakeword.cpp` in the team build so it doesn't flood P4's terminal. |
 
 **HAL callbacks:** each one can only be written **once** in the whole project. Audio defines:
 
 - `HAL_I2S_RxHalfCpltCallback`, `HAL_I2S_RxCpltCallback` (in `wakeword.cpp`, only acts on SPI2)
-- `HAL_SAI_TxCpltCallback` (in `audio_sfx.c`, only acts on SAI2 block A)
+- `HAL_SAI_TxHalfCpltCallback`, `HAL_SAI_TxCpltCallback` (in `audio_sfx.c`, only act on SAI2 block A)
+
+SPI3 (SD card) uses **no** DMA and **no** interrupts; it's polled.
 
 If your code needs one of these too, tell P5 and we'll merge them.
 
 ---
 
-## 8. Test it
+## 8. Put the sound files on the SD card
+
+BMO plays **WAV files, 16-bit PCM, 22050 Hz, mono**, with **short CAPITAL names** (8.3 style).
+
+| File | Plays when |
+|---|---|
+| `HI.WAV` | BMO hears "hey BMO" |
+| `GAMES.WAV` | BMO hears "games" |
+| `HMM.WAV` | (spare) BMO didn't understand |
+| `TRACK1.WAV` … `TRACK6.WAV` | the songs, in Music-menu order |
+
+Convert any MP3/M4A/AIFF on a Mac with the built-in `afconvert`:
+
+```
+afconvert -f WAVE -d LEI16@22050 -c 1 "input file.mp3" TRACK1.WAV
+```
+
+A quick test voice line from the Mac's own voice (avoid `!` right before the closing quote in zsh):
+
+```
+say -v Samantha -o hi.aiff "Hi! What do you want to do?"
+afconvert -f WAVE -d LEI16@22050 -c 1 hi.aiff HI.WAV
+```
+
+Copy to the card, check, eject (the card's name may be `NO NAME`):
+
+```
+cp *.WAV "/Volumes/NO NAME/"
+ls -la "/Volumes/NO NAME/"
+diskutil eject "/Volumes/NO NAME"
+```
+
+- A 2½-minute song is about 6.4 MB.
+- **Songs and show clips stay on the SD card only**, never in the GitHub repo: they're large
+  and other people's copyright. Free music: Pixabay Music, or YouTube Studio → Audio Library.
+
+---
+
+## 9. Test it
 
 1. Plug the USB cable into **CN1** (the ST-LINK port), not CN13.
 2. Click **Run** ▶ and wait for *"Download verified successfully"*.
@@ -355,7 +503,7 @@ If your code needs one of these too, tell P5 and we'll merge them.
 You should hear a **short beep**, and see:
 
 ```
-=== BMO wake word (v4) ===
+=== BMO wake word (v5) ===
 model: 5 labels, window 24000 samples, 16000 Hz
 listening... say "hey BMO"
 games   0  hey_bmo   0  music   0  noise 100  unknown   0  (86 ms)
@@ -363,6 +511,20 @@ games   0  hey_bmo   0  music   0  noise 100  unknown   0  (86 ms)
 
 Say **"hey BMO"** from 10–15 cm: you'll see **`HEY BMO!`**, hear **"bee-boop!"**, and the green LED
 lights. Within 4 s, say **"games"** or **"music"**: you'll see the command and hear **"bip"**.
+
+The SD card is only opened the first time BMO plays a file, so the SD lines appear right after
+the first `HEY BMO!`. A working card prints:
+
+```
+sd: v3 driver, CMD0 -> 01 (01 = card found)
+sd: CMD8 echo 01 AA (01 AA = OK)
+sd: card type 0C (0C = SDHC, 0 = failed)
+audio: SD card ready
+audio: playing HI.WAV
+```
+
+Then you hear the voice line. "music" plays `TRACK1.WAV`. Say "hey BMO" during a song (loudly,
+close to the mic) or press the blue USER button to stop it.
 
 ### Troubleshooting
 
@@ -375,9 +537,16 @@ lights. Within 4 s, say **"games"** or **"music"**: you'll see the command and h
 | Very quiet | Raise `SFX_VOLUME` near the top of `audio_sfx.c` (max about 20000), or connect GAIN to GND |
 | Never says HEY BMO | Watch the `hey_bmo` score while you speak: closer to the mic, normal voice |
 | Wakes up by itself | Raise `SURE` at the top of `wakeword.cpp` from `0.95f` towards `0.98f` |
-| Build: `main.c ... expected declaration ... at end of input` | A `}` is missing in USER CODE 3 (5d) |
+| Build: `main.c ... expected declaration ... at end of input` | A `}` is missing in USER CODE 3 (5e) |
 | Build: multiple definition of `HAL_I2S_Rx...Callback` | `mic_stream.c` is still in the build (5c) |
 | Build/link: `.sram1` warnings, or audio is garbage | The `.sram1` section is missing from the `.ld` (5b) |
+| `sd: ... CMD0 -> FF` | **The card isn't answering at all: wiring or power.** Check VCC on **5V**, GND, MISO→PC11 / MOSI→PC12 not swapped, SCK→PC10, CS→PD2, the card clicked in. Then unplug USB for 5 s. |
+| `CMD0 -> 01` but `card type 00` | The card answers but doesn't finish starting: power (5V) or a loose wire |
+| `card type 0C`, then `data token ..` / `read failed` | Start-up works, reading fails: the wires are too long for the speed. The driver retries slower by itself; you can also set `SD_FAST_PRESCALER` to `_64` in `sd_spi.c`. |
+| `audio: SD card mount failed (FatFs error 1)` and no `sd:` lines | An older `sd_spi.c` is in the project (look for `v3 driver`), or the first try happened before the terminal was open |
+| `audio: can't open HI.WAV` | The file isn't on the card, or its name isn't exactly `HI.WAV` |
+| `... is not a WAV file` / `must be 16-bit PCM` / wrong pitch | Convert it again with the `afconvert` command in section 8 |
+| Build: `USER_Btn_Pin undeclared` | PC13 has no `USER_Btn` label in your project; delete the blue-button lines from USER CODE 3 |
 
 ---
 
@@ -387,8 +556,9 @@ lights. Within 4 s, say **"games"** or **"music"**: you'll see the command and h
 |---|---|
 | `firmware/Core/Src/p5_audio/wakeword.cpp` | Mic DMA + runs the Edge Impulse model |
 | `firmware/Core/Inc/p5_audio/wakeword.h` | `wakeword_start()`, `wakeword_poll()`, `WW_*` |
-| `firmware/Core/Src/p5_audio/audio_sfx.c` | Sound effects through the amp (made in code) |
-| `firmware/Core/Inc/p5_audio/audio_sfx.h` | `audio_sfx_play()`, `audio_sfx_poll()`, `audio_busy()` |
+| `firmware/Core/Src/p5_audio/audio_sfx.c` | Sound effects (made in code) and WAV files from the SD card, through the amp |
+| `firmware/Core/Inc/p5_audio/audio_sfx.h` | `audio_sfx_play()`, `audio_say()`, `audio_stop()`, `audio_busy()` ... |
+| `firmware/Core/Src/p5_audio/sd_spi.c`, `Inc/p5_audio/sd_spi.h` | SD card driver over SPI3 for FatFs |
 | `firmware/Core/Src/p5_audio/audio_test.c`, `Inc/p5_audio/audio_test.h` | Plain 441 Hz test tone |
 | `firmware/model/bmo-wakeword.1.0.1-impulse-#1.pack` | The trained model |
 | `firmware/cubemx/p5_test.ioc` | P5's working bench CubeMX settings, for reference |
@@ -407,7 +577,7 @@ generated. Once that's done, the files move into the shared project (5c).
 is correct:
 
 - Events are `WW_HEY_BMO` / `WW_GAMES` / `WW_MUSIC`, returned by `wakeword_poll()`, not `EV_*` in a queue.
-- Sounds use `audio_sfx_play(SFX_…)`. SD playback comes with the SD step.
+- Sounds use `audio_sfx_play(SFX_…)`; files from the SD card use `audio_say("NAME.WAV")`.
 - The shared project is P2's `boum.ioc` (in `team/p2/boum/`).
 - SD audio uses **SPI3** (PC10, PC11, PC12, CS PD2), not SDMMC. PC8 and PC9 are free.
 

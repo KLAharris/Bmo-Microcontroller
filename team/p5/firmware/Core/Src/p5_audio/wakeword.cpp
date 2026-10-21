@@ -35,7 +35,8 @@
 #define CMD_THRESHOLD   0.60f   /* "games"/"music": score needed in one window (after wake)    */
 #define CMD_WINDOW_MS   4000    /* "games"/"music" only count this long after "hey BMO"       */
 #define COOLDOWN_MS     1500    /* ignore everything for this long after a detection          */
-#define WW_DEBUG        1       /* 1 = print scores every window                              */
+#define WW_DEBUG        1       /* 1 = print scores every window (set 0 in the team build)    */
+#define WW_LEDS         1       /* 1 = flash the Nucleo LEDs on detections (0 in team build)  */
 
 /* ---- mic DMA (same layout as mic_stream.c) -------------------------------------------- */
 #define MIC_FRAMES       1024
@@ -57,6 +58,7 @@ static int idx_hey = -1, idx_games = -1, idx_music = -1;
 static uint8_t hist_hey;          /* last 3 windows, 1 bit each */
 static uint32_t wake_time, cooldown_until, led_off_at;
 static bool awake;
+static bool paused;
 
 /* ---- interrupt side ------------------------------------------------------------------- */
 static void store_half(int which)
@@ -99,6 +101,9 @@ static int get_audio(size_t offset, size_t length, float *out)
 /* ---- LEDs: LD1 green PB0, LD2 blue PB7, LD3 red PB14 ---------------------------------- */
 static void leds_init(void)
 {
+#if !WW_LEDS
+    return;
+#endif
     __HAL_RCC_GPIOB_CLK_ENABLE();
     GPIO_InitTypeDef g = {};
     g.Pin   = GPIO_PIN_0 | GPIO_PIN_7 | GPIO_PIN_14;
@@ -110,6 +115,10 @@ static void leds_init(void)
 
 static void led_flash(uint16_t pin)
 {
+#if !WW_LEDS
+    (void)pin;
+    return;
+#endif
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0 | GPIO_PIN_7 | GPIO_PIN_14, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOB, pin, GPIO_PIN_SET);
     led_off_at = HAL_GetTick() + 1000;
@@ -128,7 +137,7 @@ extern "C" void wakeword_start(void)
         if (strcmp(l, "games")   == 0) idx_games = i;
         if (strcmp(l, "music")   == 0) idx_music = i;
     }
-    printf("\r\n\r\n=== BMO wake word (v4) ===\r\n");
+    printf("\r\n\r\n=== BMO wake word (v5) ===\r\n");
     printf("model: %d labels, window %d samples, %d Hz\r\n",
            EI_CLASSIFIER_LABEL_COUNT, (int)WINDOW, (int)EI_CLASSIFIER_FREQUENCY);
     if (idx_hey < 0) printf("ERROR: no 'hey_bmo' label in the model!\r\n");
@@ -141,6 +150,24 @@ extern "C" void wakeword_start(void)
     }
     HAL_I2S_Receive_DMA(&hi2s2, mic_buf, MIC_FRAMES * 2);
     printf("listening... say \"hey BMO\"\r\n\r\n");
+}
+
+/* Pause while BMO is making a sound, so it doesn't hear itself (and games get the CPU).
+ * When listening starts again, the old audio (BMO's own voice) is replaced with silence,
+ * and the 4 s for "games"/"music" starts again from now. */
+extern "C" void wakeword_set_paused(int on)
+{
+    if (on && !paused) {
+        paused = true;
+    } else if (!on && paused) {
+        __disable_irq();
+        memset(ring, 0, sizeof(ring));
+        __enable_irq();
+        hist_hey = 0;
+        last_run = total_samples;
+        if (awake) wake_time = HAL_GetTick();
+        paused = false;
+    }
 }
 
 /* "hey BMO": 2 of the last 3 windows >= THRESHOLD, or one window >= SURE */
@@ -161,10 +188,11 @@ static bool check_cmd(int idx, float *scores)
 extern "C" int wakeword_poll(void)
 {
     uint32_t now = HAL_GetTick();
-    if (led_off_at && (int32_t)(now - led_off_at) >= 0) {
+    if (WW_LEDS && led_off_at && (int32_t)(now - led_off_at) >= 0) {
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0 | GPIO_PIN_7 | GPIO_PIN_14, GPIO_PIN_RESET);
         led_off_at = 0;
     }
+    if (paused) return WW_NONE;            /* BMO is talking: don't listen, save the CPU */
     if (awake && now - wake_time > CMD_WINDOW_MS) {
         awake = false;
         printf("   (stopped listening for commands)\r\n");
