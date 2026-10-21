@@ -5,3 +5,8 @@
 # Build output
 Debug/
 Release/
+
+# macOS / build artifacts outside Debug/
+.DS_Store
+*.o
+*.elf
