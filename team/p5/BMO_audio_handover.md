@@ -265,12 +265,15 @@ Drag these into Project Explorer and choose **Copy files**:
 When you edit USER CODE 3, keep the `}` that closes `while (1)`. A missing brace gives
 *"expected declaration or statement at end of input"*.
 
-For `printf` to show up in the serial terminal, the project needs the usual `__io_putchar`
-that sends to `huart3`. The P5 bench project has it in USER CODE 0:
+**Required:** add this `__io_putchar` in **USER CODE BEGIN 0**. It sends `printf` to `huart3`:
 
 ```c
 int __io_putchar(int ch) { HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, HAL_MAX_DELAY); return ch; }
 ```
+
+The audio code calls `printf`. `syscalls.c` sends `printf` to `__io_putchar`, but only declares it
+(weak); CubeMX never writes one. Without this line the first `printf` jumps to address 0 and the
+board **crashes (HardFault)** right at start-up. `boum` doesn't have it yet.
 
 ### 5e. Optional, recommended: optimisation
 
@@ -327,8 +330,8 @@ will make BMO listen without "hey BMO". Coming with the next update.
 
 | Resource | Used by audio |
 |---|---|
-| DMA1 Stream 1 | SPI2_RX (mic) |
-| DMA2 Stream 2 | SAI2_A (amp) |
+| One DMA1 stream | SPI2_RX (mic). Any stream CubeMX picks is fine: Stream 1 on the P5 bench, Stream 3 in `boum.ioc`. |
+| One DMA2 stream | SAI2_A (amp). Any stream CubeMX picks is fine: Stream 2 on the P5 bench, Stream 4 in `boum.ioc`. |
 | PLLI2S, PLLSAI | mic and amp clocks (2d) |
 | USART3 (PD8/PD9) | `printf` for testing only. Set `WW_DEBUG 0` at the top of `wakeword.cpp` in the team build so it doesn't flood P4's terminal. |
 
