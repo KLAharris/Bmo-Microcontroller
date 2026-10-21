@@ -1,4 +1,7 @@
 
+#include "bmo_menu.h"
+#include "bmo_p3_music_adapter.h"
+
 #include "bmo_state.h"
 #include "bmo_face.h"
 #include "bmo_input.h"
@@ -6,8 +9,10 @@
 #include <stdint.h>
 
 /* Timing configuration (milliseconds) */
-#define BMO_REACTION_DURATION_MS   3000U
-#define BMO_IDLE_SLEEP_TIMEOUT_MS  300000U
+#define BMO_REACTION_DURATION_MS    3000U
+#define BMO_IDLE_SLEEP_TIMEOUT_MS   300000U
+#define BMO_LISTENING_TIMEOUT_MS    10000U
+#define BMO_PROCESSING_TIMEOUT_MS   5000U
 
 /* Current state and timing */
 static bmo_state_t current_state;
@@ -38,16 +43,35 @@ static void bmo_state_on_enter(bmo_state_t state)
 
         case BMO_STATE_MENU:
             face_set_active(0);
-            /* TODO: Activate actual LCD menu */
+            /* TODO: Integrate actual LCD menu */
             break;
 
         case BMO_STATE_APP:
             face_set_active(0);
 
-            /* Start the game selected in MENU */
-            bmo_game_start(
-                bmo_input_get_selected_game()
-            );
+            /* Start the selected game or music app */
+            if (bmo_menu_get_category() == BMO_MENU_MUSIC)
+            {
+                bmo_p3_music_start();
+            }
+            else if (bmo_menu_get_category() == BMO_MENU_GAMES)
+            {
+                bmo_game_start(bmo_input_get_selected_game());
+            }
+            break;
+
+        case BMO_STATE_LISTENING:
+            face_set_active(1);
+            face_show(FACE_IDLE);
+
+            /* TODO P5: Start microphone recording */
+            break;
+
+        case BMO_STATE_PROCESSING:
+            face_set_active(1);
+            face_show(FACE_IDLE);
+
+            /* TODO P5: Process recorded voice command */
             break;
 
         default:
@@ -64,19 +88,28 @@ static void bmo_state_on_exit(bmo_state_t state)
             /* TODO: Restore system after wake */
             break;
 
-        case BMO_STATE_IDLE:
-            break;
-
-        case BMO_STATE_REACTING:
-            break;
-
         case BMO_STATE_MENU:
             /* TODO: Close actual LCD menu */
             break;
 
         case BMO_STATE_APP:
-            /* Stop the active game before leaving APP */
-            bmo_game_stop();
+            /* Stop the active app before leaving APP */
+            if (bmo_menu_get_category() == BMO_MENU_MUSIC)
+            {
+                bmo_p3_music_stop();
+            }
+            else
+            {
+                bmo_game_stop();
+            }
+            break;
+
+        case BMO_STATE_LISTENING:
+            /* TODO P5: Stop microphone recording */
+            break;
+
+        case BMO_STATE_PROCESSING:
+            /* TODO P5: Cancel pending voice processing */
             break;
 
         default:
@@ -143,6 +176,10 @@ void bmo_state_handle_event(bmo_event_t event)
             {
                 bmo_state_transition(BMO_STATE_SLEEP);
             }
+            else if (event == BMO_EVENT_TALK_PRESSED)
+            {
+                bmo_state_transition(BMO_STATE_LISTENING);
+            }
             break;
 
         case BMO_STATE_MENU:
@@ -154,19 +191,65 @@ void bmo_state_handle_event(bmo_event_t event)
             {
                 bmo_state_transition(BMO_STATE_IDLE);
             }
+            else if (event == BMO_EVENT_TALK_PRESSED)
+            {
+                bmo_state_transition(BMO_STATE_LISTENING);
+            }
             break;
 
         case BMO_STATE_APP:
-            if (event == BMO_EVENT_BACK)
+            if (event == BMO_EVENT_SELECT &&
+                bmo_menu_get_category() == BMO_MENU_MUSIC)
+            {
+                bmo_p3_music_handle_enter();
+            }
+            else if (event == BMO_EVENT_BACK)
             {
                 bmo_state_transition(BMO_STATE_IDLE);
             }
 
-            /* Ignore SHAKE while playing a game */
+            /* Ignore SHAKE and TALK while an app is running */
             break;
 
         case BMO_STATE_REACTING:
             if (event == BMO_EVENT_TIMEOUT)
+            {
+                bmo_state_transition(BMO_STATE_IDLE);
+            }
+            else if (event == BMO_EVENT_TALK_PRESSED)
+            {
+                bmo_state_transition(BMO_STATE_LISTENING);
+            }
+            break;
+
+        case BMO_STATE_LISTENING:
+            if (event == BMO_EVENT_TALK_RELEASED)
+            {
+                bmo_state_transition(BMO_STATE_PROCESSING);
+            }
+            else if (event == BMO_EVENT_BACK ||
+                     event == BMO_EVENT_TIMEOUT ||
+                     event == BMO_EVENT_VOICE_ERROR)
+            {
+                bmo_state_transition(BMO_STATE_IDLE);
+            }
+            break;
+
+        case BMO_STATE_PROCESSING:
+            if (event == BMO_EVENT_VOICE_GAME ||
+                event == BMO_EVENT_VOICE_MUSIC)
+            {
+                /*
+                 * Voice command recognized.
+                 * TODO: Select the correct menu category
+                 * once the menu API is integrated.
+                 */
+                bmo_state_transition(BMO_STATE_MENU);
+            }
+            else if (event == BMO_EVENT_VOICE_UNKNOWN ||
+                     event == BMO_EVENT_VOICE_ERROR ||
+                     event == BMO_EVENT_TIMEOUT ||
+                     event == BMO_EVENT_BACK)
             {
                 bmo_state_transition(BMO_STATE_IDLE);
             }
@@ -200,10 +283,27 @@ void bmo_state_tick(uint32_t now_ms)
     {
         bmo_state_handle_event(BMO_EVENT_SLEEP_REQUEST);
     }
+    else if (current_state == BMO_STATE_LISTENING &&
+             elapsed_ms >= BMO_LISTENING_TIMEOUT_MS)
+    {
+        bmo_state_handle_event(BMO_EVENT_TIMEOUT);
+    }
+    else if (current_state == BMO_STATE_PROCESSING &&
+             elapsed_ms >= BMO_PROCESSING_TIMEOUT_MS)
+    {
+        bmo_state_handle_event(BMO_EVENT_TIMEOUT);
+    }
 
-    /* Update the active game without blocking */
+    /* Update the active app without blocking */
     if (current_state == BMO_STATE_APP)
     {
-        bmo_game_update(now_ms);
+        if (bmo_menu_get_category() == BMO_MENU_MUSIC)
+        {
+            bmo_p3_music_update(now_ms);
+        }
+        else
+        {
+            bmo_game_update(now_ms);
+        }
     }
 }

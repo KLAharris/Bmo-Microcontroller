@@ -1,3 +1,5 @@
+#include "bmo_menu.h"
+#include "bmo_p3_music_adapter.h"
 
 #include "bmo_input.h"
 #include "bmo_state.h"
@@ -63,7 +65,14 @@ void bmo_input_handle_direction(
     }
 
     /* APP: forward direction to the active game */
-    bmo_game_handle_direction(direction);
+    if (bmo_menu_get_category() == BMO_MENU_MUSIC)
+    {
+        bmo_p3_music_handle_direction(direction);
+    }
+    else
+    {
+        bmo_game_handle_direction(direction);
+    }
 
     /* Preserve the existing simulator callback */
     if (direction_callback != 0)
@@ -71,3 +80,4 @@ void bmo_input_handle_direction(
         direction_callback(direction);
     }
 }
+

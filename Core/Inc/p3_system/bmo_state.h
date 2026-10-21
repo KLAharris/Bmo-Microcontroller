@@ -11,7 +11,11 @@ typedef enum
     BMO_STATE_IDLE,
     BMO_STATE_REACTING,
     BMO_STATE_MENU,
-    BMO_STATE_APP
+    BMO_STATE_APP,
+
+    /* Audio / Voice states */
+    BMO_STATE_LISTENING,
+    BMO_STATE_PROCESSING
 } bmo_state_t;
 
 /* Events handled by the state machine */
@@ -23,7 +27,15 @@ typedef enum
     BMO_EVENT_SELECT,
     BMO_EVENT_BACK,
     BMO_EVENT_SHAKE,
-    BMO_EVENT_TIMEOUT
+    BMO_EVENT_TIMEOUT,
+
+    /* Audio / Voice events */
+    BMO_EVENT_TALK_PRESSED,
+    BMO_EVENT_TALK_RELEASED,
+    BMO_EVENT_VOICE_GAME,
+    BMO_EVENT_VOICE_MUSIC,
+    BMO_EVENT_VOICE_UNKNOWN,
+    BMO_EVENT_VOICE_ERROR
 } bmo_event_t;
 
 /* Initialize the state machine */
